@@ -13,7 +13,7 @@ DATA_SIZE = 28*28
 
 BATCH_SIZE = 100
 
-NUM_EPOCHS = 100
+NUM_EPOCHS = 1
 
 
 #Read the MNIST dataset.
@@ -34,7 +34,7 @@ barrays = [train_images_barray, train_labels_barray, test_images_barray, test_la
 for f, ba in zip(files, barrays):
     byte = f.read(1)
     while byte:
-        ba.append(int.from_bytes(byte, byteorder="big"))
+        ba.append(int.from_bytes(byte, byteorder="big")/256)
         byte = f.read(1)
 for i in range(0, 16):
     train_images_barray.pop(0)
@@ -69,7 +69,7 @@ class Autoencoder(torch.nn.Module):
             torch.nn.Linear(100, 300),
             torch.nn.ReLU(), 
             torch.nn.Linear(300, 784),
-            torch.nn.ReLU()
+            torch.nn.Sigmoid()
         )
     
     def forward(self, input):
@@ -108,7 +108,7 @@ print("Data arranged.")
     
 model = Autoencoder()
 
-loss_fn = torch.nn.CrossEntropyLoss()
+loss_fn = torch.nn.MSELoss()
 opt = torch.optim.Adadelta(model.parameters())
 
 current_milli_time = lambda: int(round(time.time() * 1000))
@@ -117,26 +117,16 @@ before_time = current_milli_time()
 
 for epoch in range(0, NUM_EPOCHS):
     batch_loss = 0
-    correct = 0
-    incorrect = 0
     for batch in range(0, int(TRAIN_DATA_SIZE/BATCH_SIZE)):
         input_tensor = torch.stack(data[0][batch*BATCH_SIZE:(batch+1)*BATCH_SIZE])
-        label_tensor = torch.stack(data[1][batch*BATCH_SIZE:(batch+1)*BATCH_SIZE])
         opt.zero_grad()
         output_tensor = model(input_tensor.float())
-        train_loss = loss_fn(output_tensor, label_tensor.long())
+        train_loss = loss_fn(output_tensor, input_tensor.float())
         train_loss.backward()
         opt.step()
         batch_loss += train_loss.data.item()
-        preds = torch.max(output_tensor, 1).indices
-        for p, l in zip(preds.tolist(), label_tensor.tolist()):
-            if p == l:
-                correct += 1
-            else:
-                incorrect += 1
-    print("Epoch Loss : "+str(batch_loss/(TRAIN_DATA_SIZE/BATCH_SIZE)))
-    print("Percent Correct : "+str(correct/(correct+incorrect)*100.0)+"%")
     print("")
+    print("Epoch "+str(epoch+1)+" Loss : "+str(batch_loss/(TRAIN_DATA_SIZE/BATCH_SIZE)))
 
 after_time = current_milli_time()
 
@@ -144,7 +134,15 @@ seconds = math.floor((after_time-before_time)/1000)
 minutes = math.floor(seconds/60)
 seconds = seconds % 60
 print(str(NUM_EPOCHS)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" second(s).")    
-    
+
+
+#Generate new images.
+
+for image in data[0]:
+    latent_space = model.encoder(image.double())
+    latent_size_obj = latent_space.size();
+    latent_size = list(latent_size_obj)
+    print(latent_size)
     
     
     
