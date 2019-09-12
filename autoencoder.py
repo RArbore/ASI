@@ -11,9 +11,11 @@ TEST_DATA_SIZE = 10000
 
 DATA_SIZE = 28*28
 
-BATCH_SIZE = 100
+BATCH_SIZE = 200
 
 NUM_EPOCHS = 1
+
+GENS_PER_IMAGE = 2;
 
 
 #Read the MNIST dataset.
@@ -73,8 +75,8 @@ class Autoencoder(torch.nn.Module):
         )
     
     def forward(self, input):
-        out = self.encoder(input)
-        out = self.decoder(out)
+        latent = self.encoder(input)
+        out = self.decoder(latent)
         return out
     
 
@@ -138,13 +140,29 @@ print(str(NUM_EPOCHS)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" 
 
 #Generate new images.
 
-for image in data[0]:
-    latent_space = model.encoder(image.double())
-    latent_size_obj = latent_space.size();
-    latent_size = list(latent_size_obj)
-    print(latent_size)
-    
-    
+image_file = open("GENERATED_IMAGES", "wb+")
+label_file = open("GENERATED_LABELS", "wb+")
+
+count = 0
+
+mu, sigma = 0, 0.1
+
+for inimage, label in zip(data[0], data[1]):
+    count += 1
+    if (count % 1000 == 0):
+        print("1000 images looped through.")
+    latent_space_tensor = model.encoder.forward(inimage.float())
+    latent_space = latent_space_tensor.tolist()
+    for num in range(0, GENS_PER_IMAGE):
+        new_latent_space = [i for i in latent_space]
+        for i in range(0, len(latent_space)):
+            new_latent_space[i] = new_latent_space[i]+np.random.normal(mu, sigma, 1)
+        image_tensor = model.decoder.forward(torch.tensor(new_latent_space).float())
+        image_file.write(bytearray(list(map(int, (image_tensor*torch.tensor(256)).tolist()))))
+        label_file.write(bytearray(int(label.tolist())))
+image_file.close()
+label_file.close()
+print("Images written.")
     
     
     
