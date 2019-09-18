@@ -140,17 +140,14 @@ print(str(NUM_EPOCHS)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" 
 
 #Generate new images.
 
-image_file = open("GENERATED_IMAGES", "wb+")
-label_file = open("GENERATED_LABELS", "wb+")
+image_file = open("AE_GENERATED_IMAGES", "wb+")
+label_file = open("AE_GENERATED_LABELS", "wb+")
 
 count = 0
 
 mu, sigma = 0, 0.1
 
 for inimage, label in zip(data[0], data[1]):
-    count += 1
-    if (count % 1000 == 0):
-        print("1000 images looped through.")
     latent_space_tensor = model.encoder.forward(inimage.float())
     latent_space = latent_space_tensor.tolist()
     for num in range(0, GENS_PER_IMAGE):
@@ -160,6 +157,9 @@ for inimage, label in zip(data[0], data[1]):
         image_tensor = model.decoder.forward(torch.tensor(new_latent_space).float())
         image_file.write(bytearray(list(map(int, (image_tensor*torch.tensor(256)).tolist()))))
         label_file.write(bytearray(int(label.tolist())))
+    count += 1
+    if (count % 1000 == 0):
+        print("1000 images looped through.")
 image_file.close()
 label_file.close()
 print("Images written.")
