@@ -13,9 +13,13 @@ DATA_SIZE = 28*28
 
 BATCH_SIZE = 200
 
-NUM_EPOCHS = 1
+NUM_EPOCHS = 20
 
-GENS_PER_IMAGE = 2;
+GENS_PER_IMAGE = 2
+
+SPARSITY = 0.05
+
+SPARSE_MODIFIER = 20
 
 
 #Read the MNIST dataset.
@@ -47,12 +51,24 @@ for i in range(0, 8):
 print("MNIST loaded.")
 
 
+#Declare the custom sparse loss function.
+
+def sparsity(ae, batch):
+    latent = model.encoder.forward(batch.float())
+    p_hat = torch.mean(latent, 0)
+    p = SPARSITY
+    sum = 0
+    for j in range(0, 10):
+        sum += p*torch.log(p/(p_hat[j]))+(1-p)*torch.log((1-p)/(1-(p_hat[j])))
+    return sum
+    
+
 #Declare the structure of the Autoencoder.
 
-class Autoencoder(torch.nn.Module):
+class SparseAutoencoder(torch.nn.Module):
     
     def __init__(self):
-        super(Autoencoder, self).__init__()
+        super(SparseAutoencoder, self).__init__()
         self.encoder = torch.nn.Sequential(
             torch.nn.Linear(784, 300),
             torch.nn.ReLU(),       
@@ -108,7 +124,7 @@ print("Data arranged.")
     
 #Declare and train the network.
     
-model = Autoencoder()
+model = SparseAutoencoder()
 
 loss_fn = torch.nn.MSELoss()
 opt = torch.optim.Adadelta(model.parameters())
@@ -118,17 +134,22 @@ current_milli_time = lambda: int(round(time.time() * 1000))
 before_time = current_milli_time()
 
 for epoch in range(0, NUM_EPOCHS):
-    batch_loss = 0
+    batch_recon_loss = 0
+    batch_sparse_loss = 0
     for batch in range(0, int(TRAIN_DATA_SIZE/BATCH_SIZE)):
         input_tensor = torch.stack(data[0][batch*BATCH_SIZE:(batch+1)*BATCH_SIZE])
         opt.zero_grad()
         output_tensor = model(input_tensor.float())
-        train_loss = loss_fn(output_tensor, input_tensor.float())
-        train_loss.backward()
+        recon_loss = loss_fn(output_tensor, input_tensor.float())
+        sparse_loss = sparsity(model, input_tensor.float())*SPARSE_MODIFIER
+        loss = recon_loss + sparse_loss
+        loss.backward()
         opt.step()
-        batch_loss += train_loss.data.item()
+        batch_recon_loss += recon_loss.data.item()
+        batch_sparse_loss += sparse_loss.data.item()
     print("")
-    print("Epoch "+str(epoch+1)+" Loss : "+str(batch_loss/(TRAIN_DATA_SIZE/BATCH_SIZE)))
+    print("Epoch "+str(epoch+1)+"   Recon Loss : "+str(batch_recon_loss/(TRAIN_DATA_SIZE/BATCH_SIZE))+"   Sparse Loss : "+str(batch_sparse_loss/(TRAIN_DATA_SIZE/BATCH_SIZE)))
+    
 
 after_time = current_milli_time()
 
@@ -140,8 +161,8 @@ print(str(NUM_EPOCHS)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" 
 
 #Generate new images.
 
-image_file = open("AE_GENERATED_IMAGES", "wb+")
-label_file = open("AE_GENERATED_LABELS", "wb+")
+image_file = open("SAE_GENERATED_IMAGES", "wb+")
+label_file = open("SAE_GENERATED_LABELS", "wb+")
 
 count = 0
 
@@ -154,7 +175,8 @@ for inimage, label in zip(data[0], data[1]):
         new_latent_space = [i for i in latent_space]
         for i in range(0, len(latent_space)):
             new_latent_space[i] = new_latent_space[i]+np.random.normal(mu, sigma, 1)
-        image_tensor = model.decoder.forward(torch.tensor(new_latent_space).float())
+        new_latent_tensor = torch.tensor(new_latent_space).float().view(-1)
+        image_tensor = model.decoder.forward(new_latent_tensor)
         image_file.write(bytearray(list(map(int, (image_tensor*torch.tensor(256)).tolist()))))
         label_file.write(bytearray(int(label.tolist())))
     count += 1
