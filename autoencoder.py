@@ -13,9 +13,9 @@ DATA_SIZE = 28*28
 
 BATCH_SIZE = 200
 
-NUM_EPOCHS = 1
+NUM_EPOCHS = 100
 
-GENS_PER_IMAGE = 2;
+GENS_PER_DIGIT = 1;
 
 
 #Read the MNIST dataset.
@@ -113,9 +113,16 @@ model = Autoencoder()
 loss_fn = torch.nn.MSELoss()
 opt = torch.optim.Adadelta(model.parameters())
 
+mean_std_array = [] 
+#10x2 of tensors, tensors are length 10, so effective dimension is 10x2x10
+#1st dimension is the label for which distributions correspond to
+#2nd dimension is mean / std
+#3rd dimension is length of latent space
+
 current_milli_time = lambda: int(round(time.time() * 1000))
 
 before_time = current_milli_time()
+
 
 for epoch in range(0, NUM_EPOCHS):
     batch_loss = 0
@@ -127,6 +134,18 @@ for epoch in range(0, NUM_EPOCHS):
         train_loss.backward()
         opt.step()
         batch_loss += train_loss.data.item()
+    if (epoch == NUM_EPOCHS-1):
+        sorted_input_tensors = [[] for number in range(0, 10)]
+        for i in range(0, TRAIN_DATA_SIZE):
+            label = data[1][i].item()
+            sorted_input_tensors[label].append(data[0][i])
+        sorted_input_tensors = [torch.stack(list) for list in sorted_input_tensors]
+        for input_tensor in sorted_input_tensors:
+            latent_space = model.encoder.forward(input_tensor.float())
+            mean = torch.mean(latent_space, dim=0)
+            std = torch.std(latent_space, dim=0)
+            mean_std_array.append([mean, std])
+            
     print("")
     print("Epoch "+str(epoch+1)+" Loss : "+str(batch_loss/(TRAIN_DATA_SIZE/BATCH_SIZE)))
 
@@ -143,26 +162,21 @@ print(str(NUM_EPOCHS)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" 
 image_file = open("AE_GENERATED_IMAGES", "wb+")
 label_file = open("AE_GENERATED_LABELS", "wb+")
 
-count = 0
-
-mu, sigma = 0, 0.1
-
-for inimage, label in zip(data[0], data[1]):
-    latent_space_tensor = model.encoder.forward(inimage.float())
-    latent_space = latent_space_tensor.tolist()
-    for num in range(0, GENS_PER_IMAGE):
-        new_latent_space = [i for i in latent_space]
-        for i in range(0, len(latent_space)):
-            new_latent_space[i] = new_latent_space[i]+np.random.normal(mu, sigma, 1)
-        image_tensor = model.decoder.forward(torch.tensor(new_latent_space).float())
+for number in range(0, 10):
+    for i in range(0, GENS_PER_DIGIT):
+        mean = mean_std_array[number][0]
+        std = mean_std_array[number][1]
+        gaussian = torch.randn(10)
+        distribution = gaussian*std+mean
+        image_tensor = model.decoder.forward(distribution.forward())
         image_file.write(bytearray(list(map(int, (image_tensor*torch.tensor(256)).tolist()))))
-        label_file.write(bytearray(int(label.tolist())))
-    count += 1
-    if (count % 1000 == 0):
-        print("1000 images looped through.")
+        label_file.write(bytearray(int(number.tolist())))
+    print("Images of "+str(number)+"s created.")
+
 image_file.close()
 label_file.close()
-print("Images written.")
+
+print("All images written.")
     
     
     

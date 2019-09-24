@@ -12,7 +12,7 @@ DATA_SIZE = 28*28
 
 BATCH_SIZE = 200
 
-NUM_EPOCHS = 100
+NUM_EPOCHS = 180
 
 
 #Read the MNIST dataset.
@@ -145,16 +145,16 @@ for epoch in range(0, NUM_EPOCHS):
         decision = discriminator(input_tensor.float())
         generator_opt.zero_grad()
         discriminator_label = torch.tensor([1]*BATCH_SIZE+[0]*BATCH_SIZE)
-        generator_pred = decision[BATCH_SIZE:BATCH_SIZE*2]
-        generator_label = torch.ones(BATCH_SIZE)
-        generator_train_loss = loss_fn(generator_pred, generator_label.float())
-        generator_train_loss.backward(retain_graph=True)
-        generator_opt.step()
-        generator_batch_loss += generator_train_loss.item()
         discriminator_train_loss = loss_fn(decision, discriminator_label.float())
         discriminator_train_loss.backward()
         discriminator_opt.step()
         discriminator_batch_loss += discriminator_train_loss.data.item()
+        generator_pred = discriminator(torch.stack([generator.forward(torch.rand(10)).double() for i in range(0, BATCH_SIZE)]).float())
+        generator_label = torch.ones(BATCH_SIZE)
+        generator_train_loss = loss_fn(generator_pred, generator_label.float())
+        generator_train_loss.backward()
+        generator_opt.step()
+        generator_batch_loss += generator_train_loss.item()
         increment += 1
         if (int((TRAIN_DATA_SIZE/BATCH_SIZE)/10) == increment):
             print("*", end="")
