@@ -14,6 +14,8 @@ BATCH_SIZE = 200
 
 NUM_EPOCHS = 180
 
+GENS = 10
+
 
 #Read the MNIST dataset.
 
@@ -169,4 +171,4 @@ after_time = current_milli_time()
 seconds = math.floor((after_time-before_time)/1000)
 minutes = math.floor(seconds/60)
 seconds = seconds % 60
-print(str(NUM_EPOCHS)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" second(s).")    
+print(str(NUM_EPOCHS)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" second(s).")  

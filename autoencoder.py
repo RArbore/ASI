@@ -15,7 +15,7 @@ BATCH_SIZE = 200
 
 NUM_EPOCHS = 100
 
-GENS_PER_DIGIT = 1;
+GENS_PER_DIGIT = 100;
 
 
 #Read the MNIST dataset.
@@ -134,20 +134,20 @@ for epoch in range(0, NUM_EPOCHS):
         train_loss.backward()
         opt.step()
         batch_loss += train_loss.data.item()
-    if (epoch == NUM_EPOCHS-1):
-        sorted_input_tensors = [[] for number in range(0, 10)]
-        for i in range(0, TRAIN_DATA_SIZE):
-            label = data[1][i].item()
-            sorted_input_tensors[label].append(data[0][i])
-        sorted_input_tensors = [torch.stack(list) for list in sorted_input_tensors]
-        for input_tensor in sorted_input_tensors:
-            latent_space = model.encoder.forward(input_tensor.float())
-            mean = torch.mean(latent_space, dim=0)
-            std = torch.std(latent_space, dim=0)
-            mean_std_array.append([mean, std])
             
     print("")
     print("Epoch "+str(epoch+1)+" Loss : "+str(batch_loss/(TRAIN_DATA_SIZE/BATCH_SIZE)))
+
+sorted_input_tensors = [[] for number in range(0, 10)]
+for i in range(0, TRAIN_DATA_SIZE):
+    label = int(data[1][i].item()*256)
+    sorted_input_tensors[label].append(data[0][i])
+sorted_input_tensors = [torch.stack(list) for list in sorted_input_tensors]
+for input_tensor in sorted_input_tensors:
+    latent_space = model.encoder.forward(input_tensor.float())
+    mean = torch.mean(latent_space, dim=0)
+    std = torch.std(latent_space, dim=0)
+    mean_std_array.append([mean, std])
 
 after_time = current_milli_time()
 
@@ -168,16 +168,15 @@ for number in range(0, 10):
         std = mean_std_array[number][1]
         gaussian = torch.randn(10)
         distribution = gaussian*std+mean
-        image_tensor = model.decoder.forward(distribution.forward())
+        image_tensor = model.decoder.forward(distribution.float())
         image_file.write(bytearray(list(map(int, (image_tensor*torch.tensor(256)).tolist()))))
-        label_file.write(bytearray(int(number.tolist())))
+        label_file.write(bytearray(int(number)))
     print("Images of "+str(number)+"s created.")
 
 image_file.close()
 label_file.close()
 
 print("All images written.")
-    
     
     
     

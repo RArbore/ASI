@@ -3,16 +3,16 @@ import matplotlib.pyplot as plt
 import torch
 from torchvision import transforms
 
-image_file = open("MNIST_TRAIN_IMAGES", "rb")
-#image_file = open("AE_GENERATED_IMAGES", "rb")
+#image_file = open("MNIST_TRAIN_IMAGES", "rb")
+image_file = open("AE_GENERATED_IMAGES", "rb")
 byte_array = []
 byte = image_file.read(1)
-
+'''
 count = 0
 while count < 16:
     image_file.read(1)
     count += 1
-
+'''
 big_count = 0
 fig=plt.figure(figsize=(7, 3))
 while big_count < 10:
