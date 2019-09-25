@@ -4,7 +4,7 @@ import torch
 from torchvision import transforms
 
 #image_file = open("MNIST_TRAIN_IMAGES", "rb")
-image_file = open("AE_GENERATED_IMAGES", "rb")
+image_file = open("VAE_GENERATED_IMAGES", "rb")
 byte_array = []
 byte = image_file.read(1)
 '''
@@ -14,8 +14,8 @@ while count < 16:
     count += 1
 '''
 big_count = 0
-fig=plt.figure(figsize=(7, 3))
-while big_count < 10:
+fig=plt.figure(figsize=(8, 20))
+while big_count < 100:
     count = 0
     byte_array = []
     while byte and count < 784:
@@ -27,7 +27,10 @@ while big_count < 10:
     image = tensor.clone().cpu()
     image = image.view(*tensor.size())
     image = transforms.ToPILImage()(image)
-    fig.add_subplot(2, 5, big_count+1)
+    fig.add_subplot(20, 5, big_count+1)
     plt.imshow(image)
     big_count += 1
+    if big_count%100 == 0:
+        print("100 images loaded.")
+print("Drawing...")
 plt.show()

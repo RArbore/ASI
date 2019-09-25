@@ -13,9 +13,11 @@ DATA_SIZE = 28*28
 
 BATCH_SIZE = 200
 
-NUM_EPOCHS = 100
+NUM_EPOCHS = 200
 
 GENS_PER_DIGIT = 100;
+
+STD_MODIFIER = 0.5
 
 
 #Read the MNIST dataset.
@@ -167,7 +169,7 @@ for number in range(0, 10):
         mean = mean_std_array[number][0]
         std = mean_std_array[number][1]
         gaussian = torch.randn(10)
-        distribution = gaussian*std+mean
+        distribution = gaussian*std*torch.tensor(STD_MODIFIER)+mean
         image_tensor = model.decoder.forward(distribution.float())
         image_file.write(bytearray(list(map(int, (image_tensor*torch.tensor(256)).tolist()))))
         label_file.write(bytearray(int(number)))

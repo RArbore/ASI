@@ -15,9 +15,11 @@ BATCH_SIZE = 200
 
 NUM_EPOCHS = 20
 
-GENS_PER_DIGIT = 1
+GENS_PER_DIGIT = 10
 
 VARI_PARAMETER = 1
+
+STD_MODIFIER = 0.5
 
 
 #Read the MNIST dataset.
@@ -183,15 +185,15 @@ print(str(NUM_EPOCHS)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" 
 
 #Generate new images.
 
-image_file = open("AE_GENERATED_IMAGES", "wb+")
-label_file = open("AE_GENERATED_LABELS", "wb+")
+image_file = open("VAE_GENERATED_IMAGES", "wb+")
+label_file = open("VAE_GENERATED_LABELS", "wb+")
 
 for number in range(0, 10):
     for i in range(0, GENS_PER_DIGIT):
         mean = mean_std_array[number][0]
         std = mean_std_array[number][1]
         gaussian = torch.randn(10)
-        distribution = gaussian*std+mean
+        distribution = gaussian*std*torch.tensor(STD_MODIFIER)+mean
         image_tensor = model.decoder.forward(distribution.float())
         image_file.write(bytearray(list(map(int, (image_tensor*torch.tensor(256)).tolist()))))
         label_file.write(bytearray(int(number)))
