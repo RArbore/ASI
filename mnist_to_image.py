@@ -14,8 +14,8 @@ while count < 16:
     count += 1
 '''
 big_count = 0
-fig=plt.figure(figsize=(8, 20))
-while big_count < 100:
+fig=plt.figure(figsize=(8, 200))
+while big_count < 1000:
     count = 0
     byte_array = []
     while byte and count < 784:
@@ -27,7 +27,7 @@ while big_count < 100:
     image = tensor.clone().cpu()
     image = image.view(*tensor.size())
     image = transforms.ToPILImage()(image)
-    fig.add_subplot(20, 5, big_count+1)
+    fig.add_subplot(200, 5, big_count+1)
     plt.imshow(image)
     big_count += 1
     if big_count%100 == 0:

@@ -2,6 +2,8 @@ import torch
 import numpy as np
 import time
 import math
+import matplotlib.pyplot as plt
+from torchvision import transforms
 
 
 #Define constants.
@@ -15,11 +17,11 @@ BATCH_SIZE = 200
 
 NUM_EPOCHS = 20
 
-GENS_PER_DIGIT = 10
+GENS_PER_DIGIT = 100
 
 VARI_PARAMETER = 1
 
-STD_MODIFIER = 0.5
+STD_MODIFIER = 1
 
 
 #Read the MNIST dataset.
@@ -54,8 +56,11 @@ print("MNIST loaded.")
 #Declare the custom variational loss function.
 
 def variation(mu, logvar):
-    return -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    
+    #p = torch.distributions.Normal(torch.zeros(mu.size()), torch.ones(logvar.size()))
+    #q = torch.distributions.Normal(mu, logvar)
+    return -0.5 * torch.sum(1 + logvar - mu.pow(2) - (logvar).exp())
+    #return torch.distributions.kl_divergence(p, q).mean()
+
 
 #Declare the structure of the Autoencoder.
 
@@ -64,29 +69,30 @@ class VariationalAutoencoder(torch.nn.Module):
     def __init__(self):
         super(VariationalAutoencoder, self).__init__()
         self.encoder = torch.nn.Sequential(
-            torch.nn.Linear(784, 300),
+            torch.nn.Linear(784, 500),
             torch.nn.ReLU(),       
-            torch.nn.Linear(300, 100),
-            torch.nn.ReLU(), 
-            torch.nn.Linear(100, 40),
+            torch.nn.Linear(500, 200),
+            torch.nn.ReLU(),
+            torch.nn.Linear(200, 100),
+            torch.nn.ReLU(),
+            torch.nn.Linear(100, 100),
             torch.nn.ReLU()
         )
         self.to_mu = torch.nn.Sequential(
-            torch.nn.Linear(40, 10),
-            torch.nn.ReLU()      
+            torch.nn.Linear(100, 100)
         )
         self.to_std = torch.nn.Sequential(
-            torch.nn.Linear(40, 10),
-            torch.nn.ReLU()     
+            torch.nn.Linear(100, 100),
+            torch.nn.ReLU()
         )
         self.decoder = torch.nn.Sequential(
-            torch.nn.Linear(10, 40),
+            torch.nn.Linear(100, 100),
             torch.nn.ReLU(), 
-            torch.nn.Linear(40, 100),
+            torch.nn.Linear(100, 200),
             torch.nn.ReLU(), 
-            torch.nn.Linear(100, 300),
+            torch.nn.Linear(200, 500),
             torch.nn.ReLU(), 
-            torch.nn.Linear(300, 784),
+            torch.nn.Linear(500, 784),
             torch.nn.Sigmoid()
         )
         
@@ -133,7 +139,6 @@ print("Data arranged.")
     
 model = VariationalAutoencoder()
 
-loss_fn = torch.nn.MSELoss()
 opt = torch.optim.Adadelta(model.parameters())
 
 mean_std_array = [] 
@@ -153,13 +158,24 @@ for epoch in range(0, NUM_EPOCHS):
         input_tensor = torch.stack(data[0][batch*BATCH_SIZE:(batch+1)*BATCH_SIZE])
         opt.zero_grad()
         output_tensor, mu, std = model(input_tensor.float())
-        recon_loss = loss_fn(output_tensor, input_tensor.float())
+        recon_loss = torch.nn.functional.binary_cross_entropy(output_tensor, input_tensor.float(), reduction="sum")
         vari_loss = variation(mu, std)
         loss = recon_loss + vari_loss*VARI_PARAMETER
         loss.backward()
         opt.step()
         batch_recon_loss += recon_loss.data.item()
         batch_vari_loss += vari_loss.data.item()
+        if (batch == int(TRAIN_DATA_SIZE/BATCH_SIZE)-1):
+            #print(output_tensor[0, :]*torch.tensor(256))
+            #print(mu[0,:])
+            #print(std[0,:])
+            print(data[1][batch*BATCH_SIZE+epoch].item()*256)
+            tensor = (output_tensor[epoch, :]*torch.tensor(256)).reshape(28, 28).int()
+            image = tensor.clone().cpu()
+            image = image.view(*tensor.size())
+            image = transforms.ToPILImage()(image)
+            plt.imshow(image)
+            plt.show()
    
     print("")
     print("Epoch "+str(epoch+1)+"   Recon Loss : "+str(batch_recon_loss/(TRAIN_DATA_SIZE/BATCH_SIZE))+"   Variational Loss : "+str(batch_vari_loss/(TRAIN_DATA_SIZE/BATCH_SIZE)))
@@ -171,8 +187,10 @@ for i in range(0, TRAIN_DATA_SIZE):
 sorted_input_tensors = [torch.stack(list) for list in sorted_input_tensors]
 for input_tensor in sorted_input_tensors:
     latent_space = model.encoder.forward(input_tensor.float())
-    mean = torch.mean(latent_space, dim=0)
-    std = torch.std(latent_space, dim=0)
+    b_mean = model.to_mu(latent_space)
+    b_std = (0.5*model.to_std(latent_space)).exp()
+    mean = torch.mean(b_mean, dim=0)
+    std = torch.mean(b_std, dim=0)
     mean_std_array.append([mean, std])
 
 after_time = current_milli_time()
@@ -192,7 +210,7 @@ for number in range(0, 10):
     for i in range(0, GENS_PER_DIGIT):
         mean = mean_std_array[number][0]
         std = mean_std_array[number][1]
-        gaussian = torch.randn(10)
+        gaussian = torch.randn(100)
         distribution = gaussian*std*torch.tensor(STD_MODIFIER)+mean
         image_tensor = model.decoder.forward(distribution.float())
         image_file.write(bytearray(list(map(int, (image_tensor*torch.tensor(256)).tolist()))))

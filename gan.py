@@ -12,9 +12,9 @@ DATA_SIZE = 28*28
 
 BATCH_SIZE = 200
 
-NUM_EPOCHS = 180
-
 GENS = 10
+
+MIN_EPOCHS = 25
 
 
 #Read the MNIST dataset.
@@ -127,7 +127,6 @@ print("Data arranged.")
 discriminator = Discriminator()
 generator = Generator()
 
-loss_fn = torch.nn.MSELoss()
 discriminator_opt = torch.optim.Adadelta(discriminator.parameters())
 generator_opt = torch.optim.Adadelta(generator.parameters())
 
@@ -135,40 +134,48 @@ current_milli_time = lambda: int(round(time.time() * 1000))
 
 before_time = current_milli_time()
 
-for epoch in range(0, NUM_EPOCHS):
+discriminator_incorrect = 0
+
+epoch = 0
+
+while discriminator_incorrect < 0.4 or epoch < MIN_EPOCHS:
     discriminator_batch_loss = 0
     generator_batch_loss = 0
-    increment = 0
     for batch in range(0, int(TRAIN_DATA_SIZE/BATCH_SIZE)):
+        discriminator_opt.zero_grad()
+        generator_opt.zero_grad()
         real_images = data[0][batch*BATCH_SIZE:(batch+1)*BATCH_SIZE]
         fake_images = [generator.forward(torch.rand(10)).double() for i in range(0, BATCH_SIZE)]
         input_tensor = torch.stack(real_images+fake_images)
-        discriminator_opt.zero_grad()
         decision = discriminator(input_tensor.float())
-        generator_opt.zero_grad()
+        decision = decision.resize(decision.size()[0])
+        
         discriminator_label = torch.tensor([1]*BATCH_SIZE+[0]*BATCH_SIZE)
-        discriminator_train_loss = loss_fn(decision, discriminator_label.float())
+        discriminator_incorrect = (torch.sum(torch.abs(decision-discriminator_label.float()))/(2*BATCH_SIZE)).item()
+        discriminator_train_loss = torch.nn.functional.binary_cross_entropy(decision, discriminator_label.float(), reduction="sum")
         discriminator_train_loss.backward()
         discriminator_opt.step()
         discriminator_batch_loss += discriminator_train_loss.data.item()
-        generator_pred = discriminator(torch.stack([generator.forward(torch.rand(10)).double() for i in range(0, BATCH_SIZE)]).float())
+        
+        generated = torch.stack([generator.forward(torch.rand(10)).double() for i in range(0, BATCH_SIZE)]).float()
+        generator_pred = discriminator(generated)
         generator_label = torch.ones(BATCH_SIZE)
-        generator_train_loss = loss_fn(generator_pred, generator_label.float())
+        generator_train_loss = torch.nn.functional.binary_cross_entropy(generator_pred.resize(generator_pred.size()[0]), generator_label.float(), reduction="sum")
         generator_train_loss.backward()
         generator_opt.step()
         generator_batch_loss += generator_train_loss.item()
-        increment += 1
-        if (int((TRAIN_DATA_SIZE/BATCH_SIZE)/10) == increment):
-            print("*", end="")
-            increment = 0
-    print("")
+        if ((batch+1)%int((TRAIN_DATA_SIZE/BATCH_SIZE)/10) == 0):
+            print("DBL : "+str(discriminator_batch_loss/(batch+1))+"   GBL : "+str(generator_batch_loss/(batch+1)))
     print("")
     print("Discriminator Epoch "+str(epoch+1)+" Loss : "+str(discriminator_batch_loss/(TRAIN_DATA_SIZE/BATCH_SIZE)))
     print("Generator Epoch "+str(epoch+1)+" Loss : "+str(generator_batch_loss/(TRAIN_DATA_SIZE/BATCH_SIZE)))
+    print("Portion Discriminator Incorrect : "+str(discriminator_incorrect))
+    print("")
+    epoch += 1
 
 after_time = current_milli_time()
 
 seconds = math.floor((after_time-before_time)/1000)
 minutes = math.floor(seconds/60)
 seconds = seconds % 60
-print(str(NUM_EPOCHS)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" second(s).")  
+print(str(epoch)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" second(s).")  
