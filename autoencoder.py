@@ -112,7 +112,6 @@ print("Data arranged.")
     
 model = Autoencoder()
 
-loss_fn = torch.nn.MSELoss()
 opt = torch.optim.Adadelta(model.parameters())
 
 mean_std_array = [] 
@@ -132,7 +131,7 @@ for epoch in range(0, NUM_EPOCHS):
         input_tensor = torch.stack(data[0][batch*BATCH_SIZE:(batch+1)*BATCH_SIZE])
         opt.zero_grad()
         output_tensor = model(input_tensor.float())
-        train_loss = loss_fn(output_tensor, input_tensor.float())
+        train_loss = torch.nn.functional.binary_cross_entropy(output_tensor, input_tensor.float(), reduction="sum")
         train_loss.backward()
         opt.step()
         batch_loss += train_loss.data.item()

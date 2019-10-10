@@ -3,6 +3,7 @@ import numpy as np
 import time
 import math
 
+
 #Define constants.
 
 TRAIN_DATA_SIZE = 60000
@@ -12,9 +13,13 @@ DATA_SIZE = 28*28
 
 BATCH_SIZE = 200
 
-GENS = 10
+GENS = 1000
 
-MIN_EPOCHS = 25
+MIN_EPOCHS = 50
+
+ABSOLUTE_EPOCHS = 6
+
+LABEL_SMOOTHING = 0.9
 
 
 #Read the MNIST dataset.
@@ -39,7 +44,6 @@ for f, ba in zip(files, barrays):
         ba.append(int.from_bytes(byte, byteorder="big")/256)
         increment += 1
         byte = f.read(1)
-    print("*", end="")
 for i in range(0, 16):
     train_images_barray.pop(0)
     test_images_barray.pop(0)
@@ -57,15 +61,13 @@ class Discriminator(torch.nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
         self.linear = torch.nn.Sequential(
-            torch.nn.Linear(784, 300),
+            torch.nn.Linear(784*2, 800),
             torch.nn.ReLU(),       
-            torch.nn.Linear(300, 100),
+            torch.nn.Linear(800, 200),
             torch.nn.ReLU(), 
-            torch.nn.Linear(100, 40),
-            torch.nn.ReLU(), 
-            torch.nn.Linear(40, 10),
+            torch.nn.Linear(200, 30),
             torch.nn.ReLU(),
-            torch.nn.Linear(10, 1),
+            torch.nn.Linear(30, 1),
             torch.nn.Sigmoid()
         )
     
@@ -81,12 +83,10 @@ class Generator(torch.nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
         self.linear = torch.nn.Sequential(
-            torch.nn.Linear(10, 40),
-            torch.nn.ReLU(), 
-            torch.nn.Linear(40, 100),
-            torch.nn.ReLU(), 
-            torch.nn.Linear(100, 300),
-            torch.nn.ReLU(), 
+            torch.nn.Linear(10, 80),
+            torch.nn.Tanh(), 
+            torch.nn.Linear(80, 300),
+            torch.nn.Tanh(), 
             torch.nn.Linear(300, 784),
             torch.nn.Sigmoid()
         )
@@ -138,7 +138,7 @@ discriminator_incorrect = 0
 
 epoch = 0
 
-while discriminator_incorrect < 0.4 or epoch < MIN_EPOCHS:
+while (discriminator_incorrect < 0.4 or epoch < MIN_EPOCHS) and  epoch < ABSOLUTE_EPOCHS:
     discriminator_batch_loss = 0
     generator_batch_loss = 0
     for batch in range(0, int(TRAIN_DATA_SIZE/BATCH_SIZE)):
@@ -147,19 +147,21 @@ while discriminator_incorrect < 0.4 or epoch < MIN_EPOCHS:
         real_images = data[0][batch*BATCH_SIZE:(batch+1)*BATCH_SIZE]
         fake_images = [generator.forward(torch.rand(10)).double() for i in range(0, BATCH_SIZE)]
         input_tensor = torch.stack(real_images+fake_images)
-        decision = discriminator(input_tensor.float())
-        decision = decision.resize(decision.size()[0])
+        doubled_up_input = input_tensor.view(BATCH_SIZE, DATA_SIZE*2)
+        doubled_up_input += (torch.randn(doubled_up_input.size())/6).double()
+        decision = discriminator(doubled_up_input.float())
+        decision = decision.view(-1)
         
-        discriminator_label = torch.tensor([1]*BATCH_SIZE+[0]*BATCH_SIZE)
-        discriminator_incorrect = (torch.sum(torch.abs(decision-discriminator_label.float()))/(2*BATCH_SIZE)).item()
+        discriminator_label = torch.tensor([LABEL_SMOOTHING]*int(BATCH_SIZE/2)+[0]*int(BATCH_SIZE/2))
+        discriminator_incorrect = 2*(torch.sum(torch.abs(decision-discriminator_label.float()))/(2*BATCH_SIZE)).item()
         discriminator_train_loss = torch.nn.functional.binary_cross_entropy(decision, discriminator_label.float(), reduction="sum")
         discriminator_train_loss.backward()
         discriminator_opt.step()
         discriminator_batch_loss += discriminator_train_loss.data.item()
         
         generated = torch.stack([generator.forward(torch.rand(10)).double() for i in range(0, BATCH_SIZE)]).float()
-        generator_pred = discriminator(generated)
-        generator_label = torch.ones(BATCH_SIZE)
+        generator_pred = discriminator(generated.view(int(BATCH_SIZE/2), DATA_SIZE*2))
+        generator_label = torch.ones(int(BATCH_SIZE/2))
         generator_train_loss = torch.nn.functional.binary_cross_entropy(generator_pred.resize(generator_pred.size()[0]), generator_label.float(), reduction="sum")
         generator_train_loss.backward()
         generator_opt.step()
@@ -179,3 +181,23 @@ seconds = math.floor((after_time-before_time)/1000)
 minutes = math.floor(seconds/60)
 seconds = seconds % 60
 print(str(epoch)+" epochs took "+str(minutes)+" minute(s) "+str(seconds)+" second(s).")  
+
+
+image_file = open("GAN_GENERATED_IMAGES", "wb+")
+
+for i in range(GENS):
+    image_tensor = generator.forward(torch.rand(10))
+    image_tensor = image_tensor*torch.tensor(256)
+    image_tensor = torch.min(image_tensor, (torch.ones(image_tensor.size())*255).float())
+    image_tensor = torch.max(image_tensor, (torch.zeros(image_tensor.size())).float())
+    image_file.write(bytearray(list(map(int, (image_tensor.tolist())))))
+image_file.close()
+    
+    
+    
+    
+    
+    
+    
+    
+    

@@ -3,8 +3,7 @@ import matplotlib.pyplot as plt
 import torch
 from torchvision import transforms
 
-#image_file = open("MNIST_TRAIN_IMAGES", "rb")
-image_file = open("VAE_GENERATED_IMAGES", "rb")
+image_file = open("GAN_GENERATED_IMAGES", "rb")
 byte_array = []
 byte = image_file.read(1)
 '''
@@ -14,8 +13,8 @@ while count < 16:
     count += 1
 '''
 big_count = 0
-fig=plt.figure(figsize=(8, 200))
-while big_count < 1000:
+fig=plt.figure(figsize=(8, 20))
+while big_count < 100:
     count = 0
     byte_array = []
     while byte and count < 784:
@@ -23,11 +22,16 @@ while big_count < 1000:
         byte = image_file.read(1)
         count += 1
     tensor = torch.from_numpy(np.asarray(byte_array))
-    tensor = tensor.reshape(28, 28).int()
+    tensor = tensor.reshape(28, 28).float()
+    tensor = tensor/256
+    #tensor += torch.randn(tensor.size())/5
+    tensor = (tensor*256).int()
+    tensor = torch.min(tensor, (torch.ones(tensor.size())*255).int())
+    tensor = torch.max(tensor, (torch.zeros(tensor.size())).int())
     image = tensor.clone().cpu()
     image = image.view(*tensor.size())
     image = transforms.ToPILImage()(image)
-    fig.add_subplot(200, 5, big_count+1)
+    fig.add_subplot(20, 5, big_count+1)
     plt.imshow(image)
     big_count += 1
     if big_count%100 == 0:

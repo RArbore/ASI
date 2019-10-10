@@ -17,7 +17,7 @@ NUM_EPOCHS = 20
 
 SPARSITY = 0.05
 
-SPARSE_MODIFIER = 20
+SPARSE_MODIFIER = 100000
 
 GENS_PER_DIGIT = 100;
 
@@ -55,14 +55,15 @@ print("MNIST loaded.")
 
 #Declare the custom sparse loss function.
 
-def sparsity(ae, batch):
-    latent = model.encoder.forward(batch.float())
-    p_hat = torch.mean(latent, 0)
-    p = SPARSITY
-    sum = 0
+def sparsity(latent_tensor):
+    p_hat = torch.mean(latent_tensor, 0)
+    p = torch.tensor(SPARSITY)
+    s = torch.tensor(0).float()
     for j in range(0, 10):
-        sum += p*torch.log(p/(p_hat[j]))+(1-p)*torch.log((1-p)/(1-(p_hat[j])))
-    return sum
+        a = p*torch.log(p/(p_hat[j]))
+        b = (1-p)*torch.log((1-p)/(1-(p_hat[j])))
+        s += a+b
+    return s
     
 
 #Declare the structure of the Autoencoder.
@@ -79,7 +80,7 @@ class SparseAutoencoder(torch.nn.Module):
             torch.nn.Linear(100, 40),
             torch.nn.ReLU(), 
             torch.nn.Linear(40, 10),
-            torch.nn.ReLU()
+            torch.nn.Sigmoid()
         )
         self.decoder = torch.nn.Sequential(
             torch.nn.Linear(10, 40),
@@ -95,7 +96,7 @@ class SparseAutoencoder(torch.nn.Module):
     def forward(self, input):
         latent = self.encoder(input)
         out = self.decoder(latent)
-        return out
+        return out, latent
     
 
 '''
@@ -128,7 +129,6 @@ print("Data arranged.")
     
 model = SparseAutoencoder()
 
-loss_fn = torch.nn.MSELoss()
 opt = torch.optim.Adadelta(model.parameters())
 
 mean_std_array = [] 
@@ -147,9 +147,9 @@ for epoch in range(0, NUM_EPOCHS):
     for batch in range(0, int(TRAIN_DATA_SIZE/BATCH_SIZE)):
         input_tensor = torch.stack(data[0][batch*BATCH_SIZE:(batch+1)*BATCH_SIZE])
         opt.zero_grad()
-        output_tensor = model(input_tensor.float())
-        recon_loss = loss_fn(output_tensor, input_tensor.float())
-        sparse_loss = sparsity(model, input_tensor.float())*SPARSE_MODIFIER
+        output_tensor, latent_tensor = model(input_tensor.float())
+        recon_loss = torch.nn.functional.binary_cross_entropy(output_tensor, input_tensor.float(), reduction="sum")
+        sparse_loss = sparsity(latent_tensor)*SPARSE_MODIFIER
         loss = recon_loss + sparse_loss
         loss.backward()
         opt.step()
