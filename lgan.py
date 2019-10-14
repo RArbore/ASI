@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import time
 import math
+from random import randint
 
 
 #Define constants.
@@ -13,7 +14,7 @@ DATA_SIZE = 28*28
 
 BATCH_SIZE = 200
 
-GENS = 1000
+GENS_PER_DIGIT = 10
 
 MIN_EPOCHS = 50
 
@@ -60,7 +61,7 @@ class Discriminator(torch.nn.Module):
     def __init__(self):
         super(Discriminator, self).__init__()
         self.linear = torch.nn.Sequential(
-            torch.nn.Linear(784*2, 800),
+            torch.nn.Linear((784+10)*2, 800),
             torch.nn.ReLU(),       
             torch.nn.Linear(800, 200),
             torch.nn.ReLU(), 
@@ -70,8 +71,8 @@ class Discriminator(torch.nn.Module):
             torch.nn.Sigmoid()
         )
     
-    def forward(self, input):
-        out = self.linear(input)
+    def forward(self, labels, inp):
+        out = self.linear(torch.cat((labels.float(), inp), 1))
         return out
 
 
@@ -82,7 +83,7 @@ class Generator(torch.nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
         self.linear = torch.nn.Sequential(
-            torch.nn.Linear(10, 80),
+            torch.nn.Linear(20, 80),
             torch.nn.Tanh(), 
             torch.nn.Linear(80, 300),
             torch.nn.Tanh(), 
@@ -90,8 +91,9 @@ class Generator(torch.nn.Module):
             torch.nn.Sigmoid()
         )
     
-    def forward(self, input):
-        out = self.linear(input)
+    def forward(self, labels, random):
+        inp = torch.cat((labels.float(), random.float()))
+        out = self.linear(inp)
         return out
 
 
@@ -123,9 +125,17 @@ def arrange_data(train_images_barray, train_labels_barray, test_images_barray, t
     return data
 
 
-#Declare and train the network.
-    
+#Declare one-hot transform function.
+
+def one_hot(index):
+    l = [0]*10
+    l[int(index)] = 1
+    return torch.tensor(l)
+
+
 def train_model(data):
+    #Declare and train the network.
+        
     discriminator = Discriminator()
     generator = Generator()
     
@@ -147,11 +157,17 @@ def train_model(data):
             discriminator_opt.zero_grad()
             generator_opt.zero_grad()
             real_images = data[0][batch*BATCH_SIZE:(batch+1)*BATCH_SIZE]
-            fake_images = [generator.forward(torch.rand(10)).double() for i in range(0, BATCH_SIZE)]
+            real_labels = data[1][batch*BATCH_SIZE:(batch+1)*BATCH_SIZE]
+            real_labels = [one_hot(real_labels[i].item()) for i in range(0, len(real_labels))]
+            gen_labels = [one_hot(randint(0, 9)) for i in range(0, BATCH_SIZE)]
+            fake_images = [generator.forward(gen_labels[i], torch.rand(10)).double() for i in range(0, BATCH_SIZE)]
             input_tensor = torch.stack(real_images+fake_images)
+            real_label_tensor = torch.stack(real_labels).view(-1).view(int(BATCH_SIZE/2), 10*2)
+            fake_label_tensor = torch.stack(gen_labels).view(-1).view(int(BATCH_SIZE/2), 10*2)
+            label_tensor = torch.cat((real_label_tensor, fake_label_tensor))
             doubled_up_input = input_tensor.view(BATCH_SIZE, DATA_SIZE*2)
-            doubled_up_input += (torch.randn(doubled_up_input.size())/5).double()
-            decision = discriminator(doubled_up_input.float())
+            doubled_up_input += (torch.randn(doubled_up_input.size())/6).double()
+            decision = discriminator(label_tensor, doubled_up_input.float())
             decision = decision.view(-1)
             
             discriminator_label = torch.tensor([LABEL_SMOOTHING]*int(BATCH_SIZE/2)+[0]*int(BATCH_SIZE/2))
@@ -161,8 +177,10 @@ def train_model(data):
             discriminator_opt.step()
             discriminator_batch_loss += discriminator_train_loss.data.item()
             
-            generated = torch.stack([generator.forward(torch.rand(10)).double() for i in range(0, BATCH_SIZE)]).float()
-            generator_pred = discriminator(generated.view(int(BATCH_SIZE/2), DATA_SIZE*2))
+            new_gen_labels = [one_hot(randint(0, 9)) for i in range(0, BATCH_SIZE)]
+            generated = torch.stack([generator.forward(gen_labels[i], torch.rand(10)).double() for i in range(0, BATCH_SIZE)]).float()
+            new_fake_label_tensor = torch.stack(new_gen_labels).view(-1).view(int(BATCH_SIZE/2), 10*2)
+            generator_pred = discriminator(new_fake_label_tensor, generated.view(int(BATCH_SIZE/2), DATA_SIZE*2))
             generator_label = torch.ones(int(BATCH_SIZE/2))
             generator_train_loss = torch.nn.functional.binary_cross_entropy(generator_pred.resize(generator_pred.size()[0]), generator_label.float(), reduction="sum")
             generator_train_loss.backward()
@@ -176,7 +194,7 @@ def train_model(data):
         print("Portion Discriminator Incorrect : "+str(discriminator_incorrect))
         print("")
         epoch += 1
-
+    
     after_time = current_milli_time()
     
     seconds = math.floor((after_time-before_time)/1000)
@@ -186,25 +204,29 @@ def train_model(data):
     return discriminator, generator;
 
 
-#Generate images.
-
 def generate_images(generator):
-    image_file = open("GAN_GENERATED_IMAGES", "wb+")
+    image_file = open("LGAN_GENERATED_IMAGES", "wb+")
+    label_file = open("LGAN_GENERATED_LABELS", "wb+")
     
-    for i in range(GENS):
-        image_tensor = generator.forward(torch.rand(10))
-        image_tensor = image_tensor*torch.tensor(256)
-        image_tensor = torch.min(image_tensor, (torch.ones(image_tensor.size())*255).float())
-        image_tensor = torch.max(image_tensor, (torch.zeros(image_tensor.size())).float())
-        image_file.write(bytearray(list(map(int, (image_tensor.tolist())))))
+    for digit in range(0, 10):
+        gen_label = one_hot(digit)
+        for i in range(GENS_PER_DIGIT):
+            image_tensor = generator.forward(gen_label, torch.rand(10))
+            image_tensor = image_tensor*torch.tensor(256)
+            image_tensor = torch.min(image_tensor, (torch.ones(image_tensor.size())*255).float())
+            image_tensor = torch.max(image_tensor, (torch.zeros(image_tensor.size())).float())
+            image_file.write(bytearray(list(map(int, (image_tensor.tolist())))))
+            label_file.write(bytearray(int(digit)))
     image_file.close()
-    
     
 if __name__ == "__main__":
     train_images_barray, train_labels_barray, test_images_barray, test_labels_barray = read_mnist()
     data = arrange_data(train_images_barray, train_labels_barray, test_images_barray, test_labels_barray)
     generator, discriminator = train_model(data)
     generate_images(generator)
+    
+    
+    
     
     
     
