@@ -208,7 +208,7 @@ def train_model(data):
 #Generate images.
 
 def generate_images(generator):
-    image_file = open("GAN_GENERATED_IMAGES", "wb+")
+    image_file = open("DGAN_GENERATED_IMAGES", "wb+")
     
     for i in range(GENS):
         image_tensor = generator.forward(torch.rand(10))
