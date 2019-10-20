@@ -84,9 +84,13 @@ class Generator(torch.nn.Module):
         self.linear = torch.nn.Sequential(
             torch.nn.Linear(10, 80),
             torch.nn.Tanh(), 
-            torch.nn.Linear(80, 300),
+            torch.nn.Linear(80, 200),
             torch.nn.Tanh(), 
-            torch.nn.Linear(300, 784),
+            torch.nn.Linear(200, 400),
+            torch.nn.Tanh(), 
+            torch.nn.Linear(400, 570),
+            torch.nn.Tanh(), 
+            torch.nn.Linear(570, 784),
             torch.nn.Sigmoid()
         )
     
